@@ -17,6 +17,14 @@ html,body{height:100%;font-family:'Inter',sans-serif;background:#0d0d12;color:#d
 .accept{background:#43b581;color:white}
 .decline{background:#f04747;color:white}
 
+.icon-btn{background:none;border:none;color:#b9bbbe;cursor:pointer;font-size:20px;padding:8px}
+.settings-page{padding:60px 40px}
+.settings-card{background:#2f3136;border-radius:12px;padding:30px}
+.setting-row{display:flex;align-items:center;justify-content:space-between;margin:16px 0}
+.setting-row select,.setting-row input{padding:10px;background:#40444b;border:none;border-radius:8px;color:white}
+#create-group{margin:20px 0;padding:12px;background:#5865f2;color:white;border:none;border-radius:8px;cursor:pointer}
+.online{color:#43b581;font-size:12px}
+
 .main-chat{flex:1;display:flex;flex-direction:column;background:#36393f}
 .chat-header{height:48px;padding:0 16px;border-bottom:1px solid #292b2f;display:flex;align-items:center;font-weight:600;color:white;font-size:18px}
 
@@ -53,3 +61,4 @@ html,body{height:100%;font-family:'Inter',sans-serif;background:#0d0d12;color:#d
 .popup button{margin:10px;padding:10px 20px;border:none;border-radius:8px;cursor:pointer;font-weight:600}
 .popup .accept{background:#43b581;color:white}
 .popup .decline{background:#f04747;color:white}
+
