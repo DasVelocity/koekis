@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>kaka</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div id="app" class="hidden">
+    <div class="sidebar">
+      <div class="server">K</div>
+    </div>
+    <div class="guilds">
+      <div class="guild-header">DIRECT MESSAGES</div>
+      <div class="dm active" data-id="general"># general</div>
+      <div class="dm" data-id="offtopic"># offtopic</div>
+    </div>
+    <div class="main-chat">
+      <div class="chat-header">
+        <span id="room-name"># general</span>
+      </div>
+      <div id="messages" class="messages"></div>
+      <form id="message-form" class="input-area">
+        <input type="text" id="message-input" placeholder="Message #general" autocomplete="off" />
+      </form>
+    </div>
+    <div class="user-panel">
+      <img class="avatar" src="">
+      <span id="current-user"></span>
+    </div>
+  </div>
+
+  <script type="module" src="/js/firebase.js"></script>
+  <script type="module" src="/js/auth.js"></script>
+  <script type="module" src="/js/upload.js"></script>
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
