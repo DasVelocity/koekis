@@ -1,4 +1,3 @@
-// /js/app.js
 import { db, storage } from "./firebase.js";
 import {
   ref, set, push, onValue, serverTimestamp, get
@@ -10,36 +9,33 @@ if (!user) location.href = "/login.html";
 
 let currentChat = null;
 
-// userRef
+// user reference
 const userRef = ref(db, `users/${user.username}`);
 
-// keep UI avatars in sync with DB
+// Sync avatars from DB
 onValue(userRef, snap => {
   const data = snap.val() || {};
   const pfp = data.pfp || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`;
   document.getElementById("pfp-preview").src = pfp;
   document.querySelectorAll(".avatar").forEach(img => img.src = pfp);
   document.querySelector(".chat-header img").src = pfp;
-  // also store locally so other pages using localStorage can see it
   localStorage.setItem("avatar", pfp);
 });
 
-// PFP upload (auto-save when file chosen)
+// Upload PFP
 document.getElementById("pfp-input").onchange = async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
   const storageRef = sRef(storage, `pfps/${user.username}_${Date.now()}`);
   await uploadBytes(storageRef, file);
   const url = await getDownloadURL(storageRef);
-  // save to DB
   await set(ref(db, `users/${user.username}/pfp`), url);
-  // local update
   document.getElementById("pfp-preview").src = url;
   document.querySelectorAll(".avatar").forEach(img => img.src = url);
   localStorage.setItem("avatar", url);
 };
 
-// Tabs behaviour + make settings big
+// Tabs and expand settings
 document.querySelectorAll(".tab-btn").forEach(btn => {
   btn.onclick = () => {
     document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
@@ -49,15 +45,13 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
     document.querySelectorAll("#friends,#groups,#settings").forEach(p => p.classList.add("hidden"));
     document.getElementById(tab).classList.remove("hidden");
 
-    // expand sidebar when settings selected
     const sidebar = document.querySelector(".sidebar");
     if (tab === "settings") sidebar.classList.add("big-settings");
     else sidebar.classList.remove("big-settings");
   };
 });
 
-// Load all users into friends list (shows everyone except you).
-// If you prefer to show only actual friends, change ref to `users/${user.username}/friends`
+// Load users into friends list
 onValue(ref(db, "users"), snap => {
   const list = document.getElementById("friends");
   list.innerHTML = "";
@@ -82,7 +76,7 @@ onValue(ref(db, "users"), snap => {
   });
 });
 
-// open DM
+// Open DM
 function openDM(username) {
   currentChat = username;
   document.getElementById("chat-name").textContent = username;
@@ -90,7 +84,7 @@ function openDM(username) {
   loadMessages();
 }
 
-// load DM messages
+// Load DM messages
 function loadMessages() {
   if (!currentChat) return;
   const channelId = [user.username, currentChat].sort().join("_");
@@ -115,7 +109,7 @@ function loadMessages() {
   });
 }
 
-// Send message with Enter or via form submit
+// Send message
 const messageInput = document.getElementById("message-input");
 const messageForm = document.getElementById("message-form");
 
@@ -137,7 +131,6 @@ async function sendMessage() {
   if (!text) return;
   const channelId = [user.username, currentChat].sort().join("_");
   const msgRef = push(ref(db, `dms/${channelId}`));
-  // get latest pfp for this user
   const snap = await get(userRef);
   const myPfp = snap.val()?.pfp || localStorage.getItem("avatar") || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`;
   await set(msgRef, {
@@ -149,15 +142,22 @@ async function sendMessage() {
   messageInput.value = "";
 }
 
-// Add friend helper (writes my friends list)
+// Add friend function
 async function addFriend(friendUsername) {
-  // verify exists
   const friendSnap = await get(ref(db, `users/${friendUsername}`));
   if (!friendSnap.exists()) return alert("User not found");
-  // write into my user's friends map
   await set(ref(db, `users/${user.username}/friends/${friendUsername}`), true);
   alert(`${friendUsername} added to your friends list.`);
 }
 
-// show app
+// Add friend input in Settings
+document.getElementById("add-friend-btn")?.addEventListener("click", async e => {
+  e.preventDefault();
+  const name = document.getElementById("add-friend-input").value.trim();
+  if (!name) return alert("Enter a username");
+  await addFriend(name);
+  document.getElementById("add-friend-input").value = "";
+});
+
+// Show app
 document.getElementById("app").classList.remove("hidden");
