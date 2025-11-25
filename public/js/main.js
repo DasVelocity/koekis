@@ -1,14 +1,15 @@
-import { db, storage } from "./firebase.js";
+import { db } from "./firebase.js";
 import { ref, onValue, push, set, update, remove, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
 import { uploadFile } from "./upload.js";
+
+lucide.createIcons();
 
 const user = JSON.parse(localStorage.getItem("currentUser"));
 if (!user) location.href = "/login.html";
 
-let currentChat = null;
-let currentChatName = "Friends";
+document.getElementById("current-user").textContent = user.username;
 
-// Elements
+let currentChat = null;
 const friendList = document.getElementById("friend-list");
 const pendingList = document.getElementById("pending-list");
 const messagesDiv = document.getElementById("messages");
@@ -17,53 +18,55 @@ const fileInput = document.getElementById("file-input");
 const chatNameEl = document.getElementById("chat-name");
 const myAvatar = document.getElementById("my-avatar");
 
-// Load my profile
-onValue(ref(db, `users/${user.username}`), snap => {
-  const data = snap.val();
-  if (data?.avatar) {
-    myAvatar.src = data.avatar;
-    localStorage.setItem("myAvatar", data.avatar);
-  }
+// Load my avatar
+onValue(ref(db, `users/${user.username}/avatar`), snap => {
+  const url = snap.val() || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`;
+  myAvatar.src = url;
 }, { onlyOnce: true });
 
 // Show popup
-function showPopup(title, html, buttons) {
+function showPopup(title, msg, buttons = []) {
   const overlay = document.createElement("div");
   overlay.className = "popup-overlay";
-  overlay.innerHTML = `
-    <div class="popup">
-      <h3>${title}</h3>
-      <p>${html}</p>
-      <div>${buttons.map(b => `<button class="${b.class}">${b.text}</button>`).join("")}</div>
-    </div>`;
+  overlay.innerHTML = `<div class="popup"><h3>${title}</h3><p>${msg}</p><div>
+    ${buttons.map(b => `<button class="${b.class}">${b.text}</button>`).join("")}
+  </div></div>`;
   document.body.appendChild(overlay);
+  overlay.onclick = e => {
+    if (e.target.tagName === "BUTTON") {
+      overlay.remove();
+      b.callback?.();
+    }
+  };
   return overlay;
 }
 
-// Friend Requests
+// Friend system
 function sendFriendRequest(target) {
-  const reqRef = push(ref(db, `friendRequests/${target}`));
-  set(reqRef, { from: user.username, status: "pending", at: serverTimestamp() });
-  showPopup("Request Sent", `Friend request sent to @${target}`, [{ text: "OK", class: "accept" }]).onclick = e => e.target.textContent === "OK" && overlay.remove();
+  target = target.trim().toLowerCase();
+  if (target === user.username) return alert("Can't add yourself");
+  const reqRef = ref(db, `friendRequests/${target}/${user.username}`);
+  set(reqRef, { from: user.username, at: serverTimestamp() });
+  showPopup("Request Sent", `Friend request sent to @${target}`, [{ text: "OK", class: "accept" }]);
 }
 
 function acceptRequest(from) {
   update(ref(db, `users/${user.username}/friends`), { [from]: true });
   update(ref(db, `users/${from}/friends`), { [user.username]: true });
   remove(ref(db, `friendRequests/${user.username}/${from}`));
-  showPopup("Friend Added", `@${from} is now your friend!`, [{ text: "Awesome!", class: "accept" }]).querySelector("button").onclick = () => location.reload();
+  showPopup("Friend Added", `@${from} is now your friend!`, [{ text: "Yay!", class: "accept" }]);
 }
 
 function declineRequest(from) {
   remove(ref(db, `friendRequests/${user.username}/${from}`));
-  showPopup("Request Declined", `Declined @${from}`, [{ text: "OK", class: "decline" }]).onclick = () => overlay.remove();
+  showPopup("Declined", `Declined @${from}`, [{ text: "OK", class: "decline" }]);
 }
 
-// Load friends & requests
+// Load friends
 onValue(ref(db, `users/${user.username}/friends`), snap => {
   friendList.innerHTML = "";
   const friends = snap.val() || {};
-  Object.keys(friends).forEach(f => {
+  Object.keys(friends).sort().forEach(f => {
     const div = document.createElement("div");
     div.className = "friend";
     div.innerHTML = `<img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${f}" alt="">
@@ -73,20 +76,21 @@ onValue(ref(db, `users/${user.username}/friends`), snap => {
   });
 });
 
+// Load pending requests
 onValue(ref(db, `friendRequests/${user.username}`), snap => {
   pendingList.innerHTML = "";
   snap.forEach(child => {
-    const req = child.val();
+    const from = child.key;
     const div = document.createElement("div");
     div.className = "pending-item";
-    div.innerHTML = `<img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${req.from}" alt="">
-                     <div><strong>@${req.from}</strong> wants to be friends</div>
+    div.innerHTML = `<img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${from}" alt="">
+                     <div><strong>@${from}</strong> wants to be friends</div>
                      <div class="pending-actions">
                        <button class="accept">Accept</button>
                        <button class="decline">Decline</button>
                      </div>`;
-    div.querySelector(".accept").onclick = () => acceptRequest(req.from);
-    div.querySelector(".decline").onclick = () => declineRequest(req.from);
+    div.querySelector(".accept").onclick = () => acceptRequest(from);
+    div.querySelector(".decline").onclick = () => declineRequest(from);
     pendingList.appendChild(div);
   });
 });
@@ -94,8 +98,7 @@ onValue(ref(db, `friendRequests/${user.username}`), snap => {
 // Open DM
 function openDM(username) {
   currentChat = [user.username, username].sort().join("_");
-  currentChatName = "@" + username;
-  chatNameEl.textContent = currentChatName;
+  chatNameEl.textContent = "@" + username;
   loadMessages();
 }
 
@@ -114,7 +117,7 @@ function loadMessages() {
         <div>
           <div class="message-author">${msg.user}</div>
           <div class="message-content">${msg.text || ""}</div>
-          ${msg.media ? (msg.media.includes("video") ? `<video src="${msg.media}" controls class="media"></video>` : `<img src="${msg.media}" class="media">`) : ""}
+          ${msg.media ? `<img src="${msg.media}" class="media" onerror="this.style.display='none'">` : ""}
         </div>`;
       messagesDiv.appendChild(div);
     });
@@ -124,44 +127,39 @@ function loadMessages() {
 
 // Send message
 async function sendMessage() {
+  if (!currentChat) return alert("Select a friend first");
   if (!messageInput.value.trim() && !fileInput.files[0]) return;
+
   let media = null;
   if (fileInput.files[0]) {
     media = await uploadFile(fileInput.files[0]);
     fileInput.value = "";
   }
+
   const msgRef = push(ref(db, `dms/${currentChat}`));
   await set(msgRef, {
     user: user.username,
     text: messageInput.value,
-    avatar: localStorage.getItem("myAvatar") || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`,
+    avatar: myAvatar.src,
     media,
     timestamp: serverTimestamp()
   });
   messageInput.value = "";
 }
 
-messageInput.addEventListener("keydown", e => e.key === "Enter" && sendMessage());
-document.querySelector(".attach-btn")?.addEventListener("click", () => fileInput.click());
+messageInput.addEventListener("keydown", e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), sendMessage()));
 fileInput.addEventListener("change", sendMessage);
 
-// Settings Tab
-document.querySelector(".user-panel").onclick = () => {
+// Settings
+document.getElementById("settings-btn").onclick = e => {
+  e.stopPropagation();
   document.querySelector(".main-chat").innerHTML = `
     <div class="settings-page">
       <div class="settings-card">
-        <h2>My Account</h2>
+        <h2>User Settings</h2>
         <div class="setting-row">
           <label>Change Avatar</label>
           <input type="file" id="avatar-upload" accept="image/*">
-        </div>
-        <div class="setting-row">
-          <label>Username</label>
-          <input type="text" value="${user.username}" disabled>
-        </div>
-        <div class="setting-row">
-          <label>Status</label>
-          <select><option>Online</option><option>Away</option><option>Do Not Disturb</option><option>Invisible</option></select>
         </div>
         <button class="logout-btn" id="logout">Logout</button>
       </div>
@@ -174,18 +172,18 @@ document.querySelector(".user-panel").onclick = () => {
     const file = e.target.files[0];
     if (file) {
       const url = await uploadFile(file);
-      await update(ref(db, `users/${user.username}`), { avatar: url });
-      localStorage.setItem("myAvatar", url);
-      myAvatar.src = url;
+      if (url) {
+        await update(ref(db, `users/${user.username}`), { avatar: url });
+        myAvatar.src = url;
+      }
     }
   };
 };
 
-// Add friend (click anywhere in input area to add friend)
+// Add friend on double click input area
 document.querySelector(".input-area").ondblclick = () => {
   const name = prompt("Enter username to add:");
   if (name) sendFriendRequest(name.trim().toLowerCase());
 };
 
-// Init
 document.getElementById("app").classList.remove("hidden");
