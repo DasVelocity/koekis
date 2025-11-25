@@ -7,10 +7,14 @@ lucide.createIcons();
 const user = JSON.parse(localStorage.getItem("currentUser"));
 if (!user) location.href = "/login.html";
 
-document.getElementById("current-user").textContent = user.username;
+document.getElementById("current-user").textContent = "@" + user.username;
 
 let currentChat = null;
+let currentChatType = "dm";
+let unread = {};
+
 const friendList = document.getElementById("friend-list");
+const groupList = document.getElementById("group-list");
 const pendingList = document.getElementById("pending-list");
 const messagesDiv = document.getElementById("messages");
 const messageInput = document.getElementById("message-input");
@@ -18,106 +22,58 @@ const fileInput = document.getElementById("file-input");
 const chatNameEl = document.getElementById("chat-name");
 const myAvatar = document.getElementById("my-avatar");
 
-// Load my avatar
-onValue(ref(db, `users/${user.username}/avatar`), snap => {
-  const url = snap.val() || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`;
-  myAvatar.src = url;
-}, { onlyOnce: true });
-
-// Show popup
-function showPopup(title, msg, buttons = []) {
-  const overlay = document.createElement("div");
-  overlay.className = "popup-overlay";
-  overlay.innerHTML = `<div class="popup"><h3>${title}</h3><p>${msg}</p><div>
-    ${buttons.map(b => `<button class="${b.class}">${b.text}</button>`).join("")}
-  </div></div>`;
-  document.body.appendChild(overlay);
-  overlay.onclick = e => {
-    if (e.target.tagName === "BUTTON") {
-      overlay.remove();
-      b.callback?.();
-    }
-  };
-  return overlay;
-}
-
-// Friend system
-function sendFriendRequest(target) {
-  target = target.trim().toLowerCase();
-  if (target === user.username) return alert("Can't add yourself");
-  const reqRef = ref(db, `friendRequests/${target}/${user.username}`);
-  set(reqRef, { from: user.username, at: serverTimestamp() });
-  showPopup("Request Sent", `Friend request sent to @${target}`, [{ text: "OK", class: "accept" }]);
-}
-
-function acceptRequest(from) {
-  update(ref(db, `users/${user.username}/friends`), { [from]: true });
-  update(ref(db, `users/${from}/friends`), { [user.username]: true });
-  remove(ref(db, `friendRequests/${user.username}/${from}`));
-  showPopup("Friend Added", `@${from} is now your friend!`, [{ text: "Yay!", class: "accept" }]);
-}
-
-function declineRequest(from) {
-  remove(ref(db, `friendRequests/${user.username}/${from}`));
-  showPopup("Declined", `Declined @${from}`, [{ text: "OK", class: "decline" }]);
-}
-
-// Load friends
-onValue(ref(db, `users/${user.username}/friends`), snap => {
-  friendList.innerHTML = "";
-  const friends = snap.val() || {};
-  Object.keys(friends).sort().forEach(f => {
-    const div = document.createElement("div");
-    div.className = "friend";
-    div.innerHTML = `<img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${f}" alt="">
-                     <div><strong>@${f}</strong><br><span style="color:#43b581">Online</span></div>`;
-    div.onclick = () => openDM(f);
-    friendList.appendChild(div);
-  });
+onValue(ref(db, `users/${user.username}`), s => {
+  const data = s.val();
+  myAvatar.src = data?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`;
 });
 
-// Load pending requests
-onValue(ref(db, `friendRequests/${user.username}`), snap => {
-  pendingList.innerHTML = "";
-  snap.forEach(child => {
-    const from = child.key;
-    const div = document.createElement("div");
-    div.className = "pending-item";
-    div.innerHTML = `<img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${from}" alt="">
-                     <div><strong>@${from}</strong> wants to be friends</div>
-                     <div class="pending-actions">
-                       <button class="accept">Accept</button>
-                       <button class="decline">Decline</button>
-                     </div>`;
-    div.querySelector(".accept").onclick = () => acceptRequest(from);
-    div.querySelector(".decline").onclick = () => declineRequest(from);
-    pendingList.appendChild(div);
-  });
-});
+function notify(title, body) {
+  if (document.hidden && Notification.permission === "granted") {
+    new Notification(title, { body, icon: myAvatar.src });
+  }
+}
 
-// Open DM
-function openDM(username) {
-  currentChat = [user.username, username].sort().join("_");
-  chatNameEl.textContent = "@" + username;
+if (Notification.permission === "default") Notification.requestPermission();
+
+function showPopup(t, m, b = []) {
+  const o = document.createElement("div");
+  o.className = "popup-overlay";
+  o.innerHTML = `<div class="popup"><h3>${t}</h3><p>${m}</p><div>${b.map(x=>`<button class="${x.c}">${x.t}</button>`).join("")}</div></div>`;
+  document.body.appendChild(o);
+  o.onclick = e => e.target.tagName==="BUTTON" && (o.remove(), x?.a?.());
+}
+
+function openDM(u) {
+  currentChat = [user.username, u].sort().join("_");
+  currentChatType = "dm";
+  chatNameEl.textContent = "@" + u;
   loadMessages();
+  unread[currentChat] = 0;
 }
 
-// Load messages
+function openGroup(id, name) {
+  currentChat = id;
+  currentChatType = "group";
+  chatNameEl.textContent = "#" + name;
+  loadMessages();
+  unread[id] = 0;
+}
+
 function loadMessages() {
   messagesDiv.innerHTML = "";
-  if (!currentChat) return;
-  onValue(ref(db, `dms/${currentChat}`), snap => {
+  const path = currentChatType === "group" ? `groups/${currentChat}/messages` : `dms/${currentChat}`;
+  onValue(ref(db, path), s => {
     messagesDiv.innerHTML = "";
-    snap.forEach(child => {
-      const msg = child.val();
+    s.forEach(c => {
+      const m = c.val();
       const div = document.createElement("div");
-      div.className = `message ${msg.user === user.username ? "sent" : ""}`;
+      div.className = `message ${m.user === user.username ? "sent" : ""}`;
       div.innerHTML = `
-        <img class="avatar" src="${msg.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + msg.user}">
+        <img class="avatar" src="${m.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed='+m.user}">
         <div>
-          <div class="message-author">${msg.user}</div>
-          <div class="message-content">${msg.text || ""}</div>
-          ${msg.media ? `<img src="${msg.media}" class="media" onerror="this.style.display='none'">` : ""}
+          <div class="message-author">${m.user}</div>
+          <div class="message-content">${m.text || ""}</div>
+          ${m.media ? `<img src="${m.media}" class="media" onerror="this.remove()">` : ""}
         </div>`;
       messagesDiv.appendChild(div);
     });
@@ -125,9 +81,8 @@ function loadMessages() {
   });
 }
 
-// Send message
 async function sendMessage() {
-  if (!currentChat) return alert("Select a friend first");
+  if (!currentChat) return;
   if (!messageInput.value.trim() && !fileInput.files[0]) return;
 
   let media = null;
@@ -136,7 +91,8 @@ async function sendMessage() {
     fileInput.value = "";
   }
 
-  const msgRef = push(ref(db, `dms/${currentChat}`));
+  const path = currentChatType === "group" ? `groups/${currentChat}/messages` : `dms/${currentChat}`;
+  const msgRef = push(ref(db, path));
   await set(msgRef, {
     user: user.username,
     text: messageInput.value,
@@ -150,40 +106,100 @@ async function sendMessage() {
 messageInput.addEventListener("keydown", e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), sendMessage()));
 fileInput.addEventListener("change", sendMessage);
 
-// Settings
-document.getElementById("settings-btn").onclick = e => {
-  e.stopPropagation();
+onValue(ref(db, `users/${user.username}/friends`), s => {
+  friendList.innerHTML = "";
+  const f = s.val() || {};
+  Object.keys(f).sort().forEach(u => {
+    const d = document.createElement("div");
+    d.className = "friend";
+    d.innerHTML = `<img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${u}"><div><strong>@${u}</strong><span class="online">Online</span></div>`;
+    d.onclick = () => openDM(u);
+    friendList.appendChild(d);
+  });
+});
+
+onValue(ref(db, `groups`), s => {
+  groupList.innerHTML = "";
+  s.forEach(c => {
+    const g = c.val();
+    if (g.members && g.members[user.username]) {
+      const d = document.createElement("div");
+      d.className = "friend";
+      d.innerHTML = `<div><strong># ${g.name}</strong></div>`;
+      d.onclick = () => openGroup(c.key, g.name);
+      groupList.appendChild(d);
+    }
+  });
+});
+
+onValue(ref(db, `friendRequests/${user.username}`), s => {
+  pendingList.innerHTML = "";
+  s.forEach(c => {
+    const from = c.key;
+    const d = document.createElement("div");
+    d.className = "pending-item";
+    d.innerHTML = `<img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${from}"><div><strong>@${from}</strong></div>
+      <div class="pending-actions"><button class="accept">Accept</button><button class="decline">Decline</button></div>`;
+    d.querySelector(".accept").onclick = () => {
+      update(ref(db, `users/${user.username}/friends`), { [from]: true });
+      update(ref(db, `users/${from}/friends`), { [user.username]: true });
+      remove(ref(db, `friendRequests/${user.username}/${from}`));
+    };
+    d.querySelector(".decline").onclick = () => remove(ref(db, `friendRequests/${user.username}/${from}`));
+    pendingList.appendChild(d);
+  });
+});
+
+document.getElementById("add-friend-btn").onclick = () => {
+  const name = prompt("Username to add:");
+  if (name) {
+    set(ref(db, `friendRequests/${name.trim().toLowerCase()}/${user.username}`), { from: user.username });
+    showPopup("Sent", `Request sent to @${name}`);
+  }
+};
+
+document.getElementById("settings-btn").onclick = () => {
   document.querySelector(".main-chat").innerHTML = `
     <div class="settings-page">
       <div class="settings-card">
-        <h2>User Settings</h2>
-        <div class="setting-row">
-          <label>Change Avatar</label>
-          <input type="file" id="avatar-upload" accept="image/*">
-        </div>
+        <h2>My Account</h2>
+        <div class="setting-row"><label>Change Avatar</label><input type="file" id="avatar-upload" accept="image/*"></div>
+        <div class="setting-row"><label>Status</label><select id="status-select"><option>Online</option><option>Away</option><option>Do Not Disturb</option></select></div>
+        <h2>Groups</h2>
+        <button id="create-group">Create New Group</button>
         <button class="logout-btn" id="logout">Logout</button>
       </div>
     </div>`;
-  document.getElementById("logout").onclick = () => {
-    localStorage.clear();
-    location.href = "/login.html";
-  };
+  document.getElementById("logout").onclick = () => { localStorage.clear(); location.href = "/login.html"; };
   document.getElementById("avatar-upload").onchange = async e => {
-    const file = e.target.files[0];
-    if (file) {
-      const url = await uploadFile(file);
-      if (url) {
-        await update(ref(db, `users/${user.username}`), { avatar: url });
-        myAvatar.src = url;
-      }
+    const url = await uploadFile(e.target.files[0]);
+    if (url) {
+      update(ref(db, `users/${user.username}`), { avatar: url });
+      myAvatar.src = url;
+    }
+  };
+  document.getElementById("create-group").onclick = () => {
+    const name = prompt("Group name:");
+    if (name) {
+      const g = push(ref(db, "groups"));
+      set(g, { name, creator: user.username, members: { [user.username]: true } });
     }
   };
 };
 
-// Add friend on double click input area
-document.querySelector(".input-area").ondblclick = () => {
-  const name = prompt("Enter username to add:");
-  if (name) sendFriendRequest(name.trim().toLowerCase());
-};
+onValue(ref(db, "dms"), s => {
+  s.forEach(c => {
+    const chatId = c.key;
+    if (chatId.includes(user.username) && currentChat !== chatId) {
+      onValue(ref(db, `dms/${chatId}`), snap => {
+        const last = [...snap.val() || {}].pop()?.[1];
+        if (last && last.user !== user.username) {
+          unread[chatId] = (unread[chatId] || 0) + 1;
+          notify("New message", `${last.user}: ${last.text || "Media"}`);
+        }
+      }, { onlyOnce: true });
+    }
+  });
+});
 
 document.getElementById("app").classList.remove("hidden");
