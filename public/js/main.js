@@ -21,6 +21,7 @@ const messageInput = document.getElementById("message-input");
 const fileInput = document.getElementById("file-input");
 const chatNameEl = document.getElementById("chat-name");
 const myAvatar = document.getElementById("my-avatar");
+const mainChat = document.querySelector(".main-chat");
 
 onValue(ref(db, `users/${user.username}`), s => {
   const data = s.val();
@@ -32,7 +33,6 @@ function notify(title, body) {
     new Notification(title, { body, icon: myAvatar.src });
   }
 }
-
 if (Notification.permission === "default") Notification.requestPermission();
 
 function showPopup(t, m, b = []) {
@@ -122,7 +122,7 @@ onValue(ref(db, `groups`), s => {
   groupList.innerHTML = "";
   s.forEach(c => {
     const g = c.val();
-    if (g.members && g.members[user.username]) {
+    if (g.members?.[user.username]) {
       const d = document.createElement("div");
       d.className = "friend";
       d.innerHTML = `<div><strong># ${g.name}</strong></div>`;
@@ -158,9 +158,10 @@ document.getElementById("add-friend-btn").onclick = () => {
   }
 };
 
-document.getElementById("settings-btn").onclick = () => {
-  document.querySelector(".main-chat").innerHTML = `
+function openSettings() {
+  mainChat.innerHTML = `
     <div class="settings-page">
+      <button id="close-settings" class="icon-btn" style="position:absolute;top:16px;right:16px;"><i data-lucide="x"></i></button>
       <div class="settings-card">
         <h2>My Account</h2>
         <div class="setting-row"><label>Change Avatar</label><input type="file" id="avatar-upload" accept="image/*"></div>
@@ -170,6 +171,8 @@ document.getElementById("settings-btn").onclick = () => {
         <button class="logout-btn" id="logout">Logout</button>
       </div>
     </div>`;
+  lucide.createIcons();
+  document.getElementById("close-settings").onclick = () => location.reload();
   document.getElementById("logout").onclick = () => { localStorage.clear(); location.href = "/login.html"; };
   document.getElementById("avatar-upload").onchange = async e => {
     const url = await uploadFile(e.target.files[0]);
@@ -178,28 +181,30 @@ document.getElementById("settings-btn").onclick = () => {
       myAvatar.src = url;
     }
   };
-  document.getElementById("create-group").onclick = () => {
+  document.getElementById("create-group").onclick = async () => {
     const name = prompt("Group name:");
-    if (name) {
+    if (!name) return;
+    const friends = await new Promise(res => {
+      onValue(ref(db, `users/${user.username}/friends`), s => res(Object.keys(s.val() || {})), { onlyOnce: true });
+    });
+    let html = `<div style="max-height:400px;overflow-y:auto;">`;
+    friends.forEach(f => {
+      html += `<label style="display:block;padding:8px;cursor:pointer"><input type="checkbox" value="${f}"> @${f}</label>`;
+    });
+    html += `</div><button id="confirm-group" style="margin-top:16px;padding:12px;background:#5865f2;color:white;border:none;border-radius:8px">Create</button>`;
+    showPopup(`Create Group: ${name}`, html, []);
+    document.getElementById("confirm-group")?.addEventListener("click", () => {
+      const selected = Array.from(document.querySelectorAll('input[type="checkbox"]:checked')).map(c => c.value);
+      if (selected.length === 0) return alert("Select at least one friend");
       const g = push(ref(db, "groups"));
-      set(g, { name, creator: user.username, members: { [user.username]: true } });
-    }
+      const members = { [user.username]: true };
+      selected.forEach(u => members[u] = true);
+      set(g, { name, creator: user.username, members });
+      document.querySelector(".popup-overlay")?.remove();
+    });
   };
 };
 
-onValue(ref(db, "dms"), s => {
-  s.forEach(c => {
-    const chatId = c.key;
-    if (chatId.includes(user.username) && currentChat !== chatId) {
-      onValue(ref(db, `dms/${chatId}`), snap => {
-        const last = [...snap.val() || {}].pop()?.[1];
-        if (last && last.user !== user.username) {
-          unread[chatId] = (unread[chatId] || 0) + 1;
-          notify("New message", `${last.user}: ${last.text || "Media"}`);
-        }
-      }, { onlyOnce: true });
-    }
-  });
-});
+document.getElementById("settings-btn").onclick = openSettings;
 
 document.getElementById("app").classList.remove("hidden");
