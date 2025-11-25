@@ -9,31 +9,43 @@
 <body>
   <div id="app" class="hidden">
     <div class="sidebar">
-      <div class="server">K</div>
+      <div class="logo">kaka</div>
+
+      <div class="tab-buttons">
+        <div class="tab-btn active" data-tab="friends">Friends</div>
+        <div class="tab-btn" data-tab="groups">Groups</div>
+        <div class="tab-btn" data-tab="settings">Settings</div>
+      </div>
+
+      <div id="friends" class="friends-list"></div>
+      <div id="groups" class="groups-list hidden"></div>
+      <div id="settings" class="settings-panel hidden">
+        <h3>Change Profile Picture</h3>
+        <img id="pfp-preview" class="pfp-preview" src="" alt="Your PFP">
+        <label class="btn-primary" style="display:inline-block;padding:12px;cursor:pointer">Choose Image
+          <input type="file" accept="image/*" id="pfp-input">
+        </label>
+        <button id="save-pfp" class="btn-primary">Save</button>
+      </div>
     </div>
-    <div class="guilds">
-      <div class="guild-header">DIRECT MESSAGES</div>
-      <div class="dm active" data-id="general"># general</div>
-      <div class="dm" data-id="offtopic"># offtopic</div>
-    </div>
-    <div class="main-chat">
+
+    <div class="chat-area">
       <div class="chat-header">
-        <span id="room-name"># general</span>
+        <img class="avatar" src="" alt="">
+        <span id="chat-name">Select a chat</span>
       </div>
       <div id="messages" class="messages"></div>
-      <form id="message-form" class="input-area">
-        <input type="text" id="message-input" placeholder="Message #general" autocomplete="off" />
-      </form>
-    </div>
-    <div class="user-panel">
-      <img class="avatar" src="">
-      <span id="current-user"></span>
+      <div class="input-area">
+        <div class="attach-btn">+</div>
+        <input type="text" id="message-input" placeholder="Type a message..." />
+        <button style="display:none">Send</button>
+      </div>
     </div>
   </div>
 
   <script type="module" src="/js/firebase.js"></script>
   <script type="module" src="/js/auth.js"></script>
   <script type="module" src="/js/upload.js"></script>
-  <script type="module" src="/js/main.js"></script>
+  <script type="module" src="/js/app.js"></script>
 </body>
 </html>
