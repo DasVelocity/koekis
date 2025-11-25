@@ -3,16 +3,16 @@ import { supabase } from './supabase.js';
 export async function uploadFile(file) {
   if (!file) return null;
 
-  const fileExt = file.name.split('.').pop();
+  const fileExt = file.name.split('.').pop() || '';
   const fileName = `${Date.now()}_${Math.random().toString(36)}.${fileExt}`;
 
   const { error } = await supabase.storage
-    .from('media')    
+    .from('media')
     .upload(fileName, file);
 
   if (error) {
     console.error(error);
-    alert('Upload failed');
+    alert('Upload failed: ' + error.message);
     return null;
   }
 
