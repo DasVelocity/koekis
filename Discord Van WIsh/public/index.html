@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Chat</title>
+  <link rel="stylesheet" href="/src/css/style.css" />
+  <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+</head>
+<body>
+  <div id="app" class="hidden">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <h2>Rooms</h2>
+        <button id="new-room">+</button>
+      </div>
+      <div id="room-list"></div>
+      <div class="user-info">
+        <span id="current-user"></span>
+        <button id="logout">Logout</button>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="chat-header">
+        <h3 id="room-name">Select a room</h3>
+      </div>
+      <div id="messages" class="messages"></div>
+      <form id="message-form" class="message-form hidden">
+        <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" required />
+        <button type="submit">Send</button>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="/src/js/firebase.js"></script>
+  <script type="module" src="/src/js/auth.js"></script>
+  <script type="module" src="/src/js/chat.js"></script>
+</body>
+</html>
