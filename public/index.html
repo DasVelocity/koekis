@@ -3,31 +3,33 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Chat</title>
+  <title>kaka • chat</title>
   <link rel="stylesheet" href="/src/css/style.css" />
-  <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+  <link rel="icon" href="data:,"/>
 </head>
 <body>
   <div id="app" class="hidden">
     <div class="sidebar">
-      <div class="sidebar-header">
-        <h2>Rooms</h2>
-        <button id="new-room">+</button>
+      <div class="logo">kaka</div>
+      <div class="rooms-header">
+        <h3>Rooms</h3>
+        <button id="new-room" title="New room">＋</button>
       </div>
       <div id="room-list"></div>
-      <div class="user-info">
+      <div class="user-panel">
+        <div class="user-avatar"></div>
         <span id="current-user"></span>
-        <button id="logout">Logout</button>
+        <button id="logout">→</button>
       </div>
     </div>
 
-    <div class="main">
+    <div class="chat-area">
       <div class="chat-header">
-        <h3 id="room-name">Select a room</h3>
+        <h2 id="room-name">Select a room</h2>
       </div>
       <div id="messages" class="messages"></div>
       <form id="message-form" class="message-form hidden">
-        <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" required />
+        <input type="text" id="message-input" placeholder="Write something beautiful..." autocomplete="off" required />
         <button type="submit">Send</button>
       </form>
     </div>
