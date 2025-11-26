@@ -2,7 +2,6 @@ import { db } from "./firebase.js";
 import { ref, onValue, push, set, update, serverTimestamp, remove, get } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
 import { uploadFile } from "./upload.js";
 
-// --- WRAP ALL EXECUTION CODE IN DOMContentLoaded TO ENSURE ELEMENTS EXIST ---
 document.addEventListener('DOMContentLoaded', () => {
     
     lucide.createIcons();
@@ -10,13 +9,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const user = JSON.parse(localStorage.getItem("currentUser"));
     if (!user) location.href = "/login.html";
 
-    // --- STATE ---
     let currentChat = null;
-    let currentChatType = null; // "dm" or "group"
-    let unreadCounts = {}; // { trackerId: true/false }
-    let friendsForGroupSelection = {}; // Stores friend data for group modal
+    let currentChatType = null;
+    let unreadCounts = {};
+    let friendsForGroupSelection = {};
 
-    // --- DOM ELEMENTS ---
     const els = {
       app: document.getElementById("app"),
       messages: document.getElementById("messages"),
@@ -42,15 +39,12 @@ document.addEventListener('DOMContentLoaded', () => {
       addFriendInput: document.getElementById("add-friend-input"),
     };
 
-    // --- INITIALIZATION & LISTENERS ---
     els.app.classList.remove("hidden");
     document.getElementById("current-user").textContent = "@" + user.username;
 
-    // Helper: Toggles visibility of a modal
     function toggleModal(id, show) {
         const el = els.overlays[id];
         if(!el) return;
-        // Reset inputs when closing
         if (!show) {
             if (id === 'addFriend') els.addFriendInput.value = '';
             if (id === 'group') {
@@ -63,7 +57,6 @@ document.addEventListener('DOMContentLoaded', () => {
         else el.classList.add("hidden");
     }
 
-    // 1. User Profile Listener
     onValue(ref(db, `users/${user.username}`), s => {
       const data = s.val() || {};
       const pfp = data.avatar || "/default.png";
@@ -71,19 +64,16 @@ document.addEventListener('DOMContentLoaded', () => {
       els.settingAvatar.src = pfp;
     });
 
-    // 2. Friend List, Unread Logic, and Group Selection Data
     onValue(ref(db, `users/${user.username}/friends`), s => {
         els.friendList.innerHTML = "";
         friendsForGroupSelection = {};
         const friendKeys = s.val() ? Object.keys(s.val()) : [];
         
         friendKeys.forEach(f => {
-            // 2a. Watch friend details (Avatar and name for sidebar)
             onValue(ref(db, `users/${f}`), friendSnap => {
                 const fData = friendSnap.val() || { username: f };
                 friendsForGroupSelection[f] = fData;
 
-                // Sidebar Item Rendering
                 const divId = `friend-nav-${f}`;
                 let div = document.getElementById(divId);
                 if (!div) {
@@ -101,7 +91,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (currentChatType === "dm" && currentChat.includes(f)) div.classList.add("active");
             });
 
-            // 2b. Listen for new messages to trigger sound/badge
             const chatId = [user.username, f].sort().join("_");
             const dmRef = ref(db, `dms/${chatId}`);
             
@@ -111,26 +100,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 const keys = Object.keys(msgs);
                 const lastMsg = msgs[keys[keys.length - 1]];
                 
-                // Only consider messages received right now (within 1 second difference)
                 const isRecent = (Date.now() - (lastMsg.timestamp || 0)) < 1000; 
                 const isNotMe = lastMsg.user !== user.username;
                 const isChatOpen = currentChat === chatId;
                 
                 if (isRecent && isNotMe && !isChatOpen) {
-                    triggerNotification(f); // Use friend's username as trackerId
+                    triggerNotification(f);
                 }
             });
         });
     });
 
-    // 3. Group List & Unread Logic
     onValue(ref(db, "groups"), s => {
       els.groupList.innerHTML = "";
       s.forEach(gSnap => {
         const g = gSnap.val();
         const gId = gSnap.key;
         
-        // Only display groups the user is a member of
         if (g.members && g.members[user.username]) {
           
           const divId = `group-nav-${gId}`;
@@ -143,13 +129,12 @@ document.addEventListener('DOMContentLoaded', () => {
             els.groupList.appendChild(div);
           }
           
-          const pfp = g.photo || "/default.png"; // Group avatar
+          const pfp = g.photo || "/default.png";
           const badgeHtml = unreadCounts[gId] ? `<div class="unread-badge"></div>` : '';
 
           div.innerHTML = `<img src="${pfp}" onerror="this.src='/default.png'"><span>${g.name}</span>${badgeHtml}`;
           if (currentChatType === "group" && currentChat === gId) div.classList.add("active");
           
-          // Group Message Listener
           onValue(ref(db, `groups/${gId}/messages`), (snap) => {
               if(!snap.exists()) return;
               const msgs = snap.val();
@@ -161,14 +146,13 @@ document.addEventListener('DOMContentLoaded', () => {
               const isChatOpen = currentChat === gId;
 
               if(isRecent && isNotMe && !isChatOpen) {
-                  triggerNotification(gId); // Use groupId as trackerId
+                  triggerNotification(gId);
               }
           });
         }
       });
     });
 
-    // Helper: Trigger Sound and Red Dot
     function triggerNotification(trackerId) {
         try { 
             els.pingSound.currentTime = 0; 
@@ -177,10 +161,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }); 
         } catch(e){}
         
-        // Set unread flag
         unreadCounts[trackerId] = true;
         
-        // Update visual badge
         const isGroup = trackerId.startsWith("-"); 
         const navId = isGroup ? `group-nav-${trackerId}` : `friend-nav-${trackerId}`;
         const el = document.getElementById(navId);
@@ -190,26 +172,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 4. Chat Logic (Includes resetting unread badge)
     function openChat(id, type, name = null) {
-      // Determine the actual Firebase path ID
       currentChat = type === "dm" ? [user.username, id].sort().join("_") : id;
       currentChatType = type;
       
-      // Determine the ID used for tracking unread state (the ID shown in the sidebar)
       const trackerId = type === "dm" ? id : id;
 
-      // Clear unread state and remove badge
       unreadCounts[trackerId] = false;
       const navItem = document.getElementById(type === "dm" ? `friend-nav-${id}` : `group-nav-${id}`);
       const badge = navItem?.querySelector(".unread-badge");
       if(badge) badge.remove();
 
-      // Update UI
       els.chatName.textContent = type === "dm" ? "@" + id : "# " + name;
       els.inputArea.classList.remove("hidden");
       
-      // UI Active State
       document.querySelectorAll(".nav-item").forEach(i => i.classList.remove("active"));
       if (navItem) navItem.classList.add("active");
       
@@ -217,7 +193,6 @@ document.addEventListener('DOMContentLoaded', () => {
       
       const path = type === "group" ? `groups/${id}/messages` : `dms/${currentChat}`;
       
-      // Listener for messages
       onValue(ref(db, path), s => {
         els.messages.innerHTML = "";
         s.forEach(msgSnap => {
@@ -251,13 +226,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }, 100); 
     }
 
-    // 5. Sending Messages (Includes Empty Message Validation)
     async function sendMessage() {
       if (!currentChat) return;
-      const txt = els.msgInput.value.trim(); // Trim whitespace
+      const txt = els.msgInput.value.trim();
       const file = els.fileInput.files[0];
       
-      // Validation: Prevent sending if text is empty AND no file is attached
       if (!txt && !file) {
         els.msgInput.classList.add("input-error");
         setTimeout(() => els.msgInput.classList.remove("input-error"), 500);
@@ -292,10 +265,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     document.getElementById("send-btn").onclick = sendMessage;
 
-
-    // --- MODAL HANDLERS ---
-
-    // Close buttons generic handler
     document.querySelectorAll(".close-modal").forEach(btn => {
       btn.onclick = (e) => {
         const overlayId = e.target.closest(".overlay").id;
@@ -304,7 +273,6 @@ document.addEventListener('DOMContentLoaded', () => {
       };
     });
 
-    // Settings & Avatar Upload
     document.getElementById("settings-trigger").onclick = () => toggleModal("settings", true);
     document.getElementById("logout-btn").onclick = () => { localStorage.clear(); location.href = "/login.html"; };
     document.getElementById("avatar-upload").onchange = async (e) => {
@@ -320,8 +288,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     document.getElementById("pending-btn").onclick = () => toggleModal("requests", true);
 
-
-    // 6. Custom Add Friend Modal Logic
     document.getElementById("add-friend-trigger").onclick = () => toggleModal("add-friend", true);
 
     document.getElementById("confirm-add-friend").onclick = async () => {
@@ -351,10 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleModal("add-friend", false);
     };
 
-
-    // 7. Custom Create Group Modal Logic
     document.getElementById("create-group-trigger").onclick = () => {
-        // Populate the friend list dynamically every time the modal opens
         els.groupFriendsList.innerHTML = '';
         
         Object.keys(friendsForGroupSelection).forEach(f => {
@@ -372,7 +335,6 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleModal("group", true);
     };
 
-    // Preview group avatar image when selected
     els.groupFileInput.onchange = (e) => {
         const file = e.target.files[0];
         if (file) {
@@ -383,7 +345,6 @@ document.addEventListener('DOMContentLoaded', () => {
             els.groupAvatarPreview.src = '/default.png';
         }
     };
-
 
     document.getElementById("confirm-create-group").onclick = async () => {
         const groupName = els.groupNameInput.value.trim();
@@ -401,20 +362,17 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        // 1. Upload Group Avatar (Optional)
         let photoUrl = null;
         if (groupFile) {
             photoUrl = await uploadFile(groupFile);
         }
         
-        // 2. Prepare member list (including self)
         const members = selectedMembers.reduce((acc, user) => {
             acc[user] = true;
             return acc;
         }, {});
-        members[user.username] = true; // Add the creator
+        members[user.username] = true;
         
-        // 3. Create Group in Firebase
         const newGroupRef = push(ref(db, "groups"));
         await set(newGroupRef, {
             name: groupName,
@@ -428,4 +386,4 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleModal("group", false);
     };
 
-}); // END OF DOMContentLoaded
+});
