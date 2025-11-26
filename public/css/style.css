@@ -73,7 +73,7 @@ body {
   cursor: pointer;
   transition: 0.2s;
   color: var(--text-muted);
-  position: relative; /* For badge */
+  position: relative; 
 }
 
 .nav-item:hover, .nav-item.active {
