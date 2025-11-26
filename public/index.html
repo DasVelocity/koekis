@@ -10,24 +10,32 @@
 </head>
 <body>
   <div id="app" class="hidden">
+    <audio id="ping-audio" src="/ping.mp3" preload="auto"></audio>
+
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="logo">kaka</div>
       </div>
       
       <div class="nav-section">
-        <div class="nav-label">Social</div>
+        <div class="nav-label">
+          <span>Social</span>
+          <button id="add-friend-trigger" class="icon-btn-small" title="Add Friend"><i data-lucide="user-plus" width="16" height="16"></i></button>
+        </div>
         <div id="friend-list" class="nav-list"></div>
       </div>
 
       <div class="nav-section">
-        <div class="nav-label">Groups</div>
+        <div class="nav-label">
+          <span>Groups</span>
+          <button id="create-group-trigger" class="icon-btn-small" title="New Group"><i data-lucide="plus" width="16" height="16"></i></button>
+        </div>
         <div id="group-list" class="nav-list"></div>
       </div>
 
       <div class="user-panel">
         <div class="user-info">
-          <img id="my-avatar" class="avatar" src="/default.png" alt="Profile">
+          <img id="my-avatar" class="avatar" src="/default.png" onerror="this.src='/default.png'" alt="Profile">
           <div class="user-details">
             <span id="current-user">...</span>
             <span class="status-indicator">Online</span>
@@ -47,7 +55,6 @@
              <i data-lucide="bell"></i>
              <span id="pending-badge" class="hidden"></span>
            </button>
-           <button id="add-friend-btn" class="icon-btn" title="Add Friend"><i data-lucide="user-plus"></i></button>
         </div>
       </header>
 
@@ -67,7 +74,7 @@
       <div class="modal settings-modal">
         <div class="modal-header">
           <h2>Settings</h2>
-          <button id="close-settings" class="icon-btn"><i data-lucide="x"></i></button>
+          <button class="close-modal icon-btn"><i data-lucide="x"></i></button>
         </div>
         <div class="modal-body">
           <div class="settings-section">
@@ -95,9 +102,23 @@
       <div class="modal">
         <div class="modal-header">
           <h2>Friend Requests</h2>
-          <button id="close-requests" class="icon-btn"><i data-lucide="x"></i></button>
+          <button class="close-modal icon-btn"><i data-lucide="x"></i></button>
         </div>
         <div id="pending-list" class="modal-body list-view"></div>
+      </div>
+    </div>
+
+    <div id="add-friend-overlay" class="overlay hidden">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>Add Friend</h2>
+          <button class="close-modal icon-btn"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body">
+          <p class="subtext" style="margin-bottom:12px;">Enter the **exact username** of the person you want to add.</p>
+          <input type="text" id="add-friend-input" placeholder="Username" class="input-field">
+          <button id="confirm-add-friend" class="btn-primary full-width">Send Request</button>
+        </div>
       </div>
     </div>
 
@@ -105,11 +126,19 @@
       <div class="modal">
         <div class="modal-header">
           <h2>Create Group</h2>
-          <button id="close-group" class="icon-btn"><i data-lucide="x"></i></button>
+          <button class="close-modal icon-btn"><i data-lucide="x"></i></button>
         </div>
         <div class="modal-body">
-          <input type="text" id="group-name-input" placeholder="Group Name" class="input-field">
-          <div class="label-text">Select Friends</div>
+          <div class="group-creation-top">
+            <label class="group-avatar-upload">
+              <img id="group-avatar-preview" src="/default.png" alt="Group Avatar">
+              <div class="overlay-icon"><i data-lucide="camera"></i></div>
+              <input type="file" id="group-file-input" hidden accept="image/*">
+            </label>
+            <input type="text" id="group-name-input" placeholder="Group Name" class="input-field">
+          </div>
+          
+          <div class="label-text">Select Members (Friends)</div>
           <div id="group-friends-list" class="selection-list"></div>
           <button id="confirm-create-group" class="btn-primary full-width">Create Group</button>
         </div>
