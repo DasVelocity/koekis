@@ -10,38 +10,112 @@
 </head>
 <body>
   <div id="app" class="hidden">
-    <div class="sidebar"><div class="server active">K</div></div>
-
-    <div class="guilds">
-      <div class="guild-header">DIRECT MESSAGES</div>
-      <div id="friend-list"></div>
-      <div class="guild-header">GROUPS</div>
-      <div id="group-list"></div>
-      <div class="guild-header">PENDING</div>
-      <div id="pending-list"></div>
-    </div>
-
-    <div class="main-chat">
-      <div class="chat-header">
-        <span id="chat-name">Select a chat</span>
-        <button id="add-friend-btn" class="icon-btn"><i data-lucide="user-plus"></i></button>
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">kaka</div>
       </div>
-      <div id="messages" class="messages"></div>
-      <div class="input-area">
-        <label for="file-input" class="icon-btn"><i data-lucide="plus"></i></label>
-        <input type="text" id="message-input" placeholder="Message..." autocomplete="off" />
+      
+      <div class="nav-section">
+        <div class="nav-label">Social</div>
+        <div id="friend-list" class="nav-list"></div>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-label">Groups</div>
+        <div id="group-list" class="nav-list"></div>
+      </div>
+
+      <div class="user-panel">
+        <div class="user-info">
+          <img id="my-avatar" class="avatar" src="/default.png" alt="Profile">
+          <div class="user-details">
+            <span id="current-user">...</span>
+            <span class="status-indicator">Online</span>
+          </div>
+        </div>
+        <button id="settings-trigger" class="icon-btn"><i data-lucide="settings"></i></button>
+      </div>
+    </aside>
+
+    <main class="chat-area">
+      <header class="chat-header">
+        <div class="chat-info">
+          <h2 id="chat-name">Dashboard</h2>
+        </div>
+        <div class="header-actions">
+           <button id="pending-btn" class="icon-btn" title="Friend Requests">
+             <i data-lucide="bell"></i>
+             <span id="pending-badge" class="hidden"></span>
+           </button>
+           <button id="add-friend-btn" class="icon-btn" title="Add Friend"><i data-lucide="user-plus"></i></button>
+        </div>
+      </header>
+
+      <div id="messages" class="messages-container">
+        <div class="empty-state">Select a chat to start messaging</div>
+      </div>
+
+      <div class="input-area hidden" id="input-area">
+        <label for="file-input" class="attach-btn"><i data-lucide="paperclip"></i></label>
         <input type="file" id="file-input" accept="image/*,video/*" hidden />
+        <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" />
+        <button id="send-btn" class="send-btn"><i data-lucide="send"></i></button>
+      </div>
+    </main>
+
+    <div id="settings-overlay" class="overlay hidden">
+      <div class="modal settings-modal">
+        <div class="modal-header">
+          <h2>Settings</h2>
+          <button id="close-settings" class="icon-btn"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body">
+          <div class="settings-section">
+            <h3>Profile</h3>
+            <div class="profile-edit">
+              <img id="settings-avatar-preview" src="/default.png" class="avatar-large">
+              <div class="profile-actions">
+                <label class="btn-secondary">
+                  Change Avatar
+                  <input type="file" id="avatar-upload" hidden accept="image/*">
+                </label>
+                <p class="subtext">Max file size 5MB</p>
+              </div>
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3>Account</h3>
+            <button id="logout-btn" class="btn-danger">Log Out</button>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="user-panel">
-      <img id="my-avatar" class="avatar" src="" alt="">
-      <div>
-        <div id="current-user">@username</div>
-        <div class="status">Online</div>
+    <div id="requests-overlay" class="overlay hidden">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>Friend Requests</h2>
+          <button id="close-requests" class="icon-btn"><i data-lucide="x"></i></button>
+        </div>
+        <div id="pending-list" class="modal-body list-view"></div>
       </div>
-      <button id="settings-btn" class="icon-btn"><i data-lucide="settings"></i></button>
     </div>
+
+    <div id="group-overlay" class="overlay hidden">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>Create Group</h2>
+          <button id="close-group" class="icon-btn"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body">
+          <input type="text" id="group-name-input" placeholder="Group Name" class="input-field">
+          <div class="label-text">Select Friends</div>
+          <div id="group-friends-list" class="selection-list"></div>
+          <button id="confirm-create-group" class="btn-primary full-width">Create Group</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script type="module" src="/js/supabase.js"></script>
