@@ -3,7 +3,7 @@ import { ref, onValue, push, set, update, serverTimestamp, remove, get } from "h
 import { uploadFile } from "./upload.js";
 
 document.addEventListener('DOMContentLoaded', () => {
-    
+
     lucide.createIcons();
 
     const user = JSON.parse(localStorage.getItem("currentUser"));
@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
         settings: document.getElementById("settings-overlay"),
         requests: document.getElementById("requests-overlay"),
         group: document.getElementById("group-overlay"),
-        addFriend: document.getElementById("add-friend-overlay"),
+        addFriend: document.getElementById("add-friend-overlay"), // ← correct modal key
       },
       groupFriendsList: document.getElementById("group-friends-list"),
       groupNameInput: document.getElementById("group-name-input"),
@@ -44,7 +44,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function toggleModal(id, show) {
         const el = els.overlays[id];
-        if(!el) return;
+        if (!el) return;
+
+        // Reset fields when closing
         if (!show) {
             if (id === 'addFriend') els.addFriendInput.value = '';
             if (id === 'group') {
@@ -53,10 +55,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 els.groupAvatarPreview.src = '/default.png';
             }
         }
+
         if (show) el.classList.remove("hidden");
         else el.classList.add("hidden");
     }
 
+    // -------------------------
+    // Avatar update listener
+    // -------------------------
     onValue(ref(db, `users/${user.username}`), s => {
       const data = s.val() || {};
       const pfp = data.avatar || "/default.png";
@@ -111,6 +117,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // -------------------------
+    // Group list
+    // -------------------------
     onValue(ref(db, "groups"), s => {
       els.groupList.innerHTML = "";
       s.forEach(gSnap => {
@@ -118,7 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const gId = gSnap.key;
         
         if (g.members && g.members[user.username]) {
-          
+
           const divId = `group-nav-${gId}`;
           let div = document.getElementById(divId);
           if (!div) {
@@ -156,17 +165,15 @@ document.addEventListener('DOMContentLoaded', () => {
     function triggerNotification(trackerId) {
         try { 
             els.pingSound.currentTime = 0; 
-            els.pingSound.play().catch(e => {
-                console.log("Audio playback blocked by browser policy.");
-            }); 
+            els.pingSound.play().catch(() => {});
         } catch(e){}
-        
+
         unreadCounts[trackerId] = true;
-        
-        const isGroup = trackerId.startsWith("-"); 
+
+        const isGroup = trackerId.startsWith("-");
         const navId = isGroup ? `group-nav-${trackerId}` : `friend-nav-${trackerId}`;
         const el = document.getElementById(navId);
-        
+
         if (el && !el.querySelector(".unread-badge")) {
             el.insertAdjacentHTML('beforeend', `<div class="unread-badge"></div>`);
         }
@@ -177,27 +184,24 @@ document.addEventListener('DOMContentLoaded', () => {
       currentChatType = type;
       
       const trackerId = type === "dm" ? id : id;
-
       unreadCounts[trackerId] = false;
+
       const navItem = document.getElementById(type === "dm" ? `friend-nav-${id}` : `group-nav-${id}`);
-      const badge = navItem?.querySelector(".unread-badge");
-      if(badge) badge.remove();
+      navItem?.querySelector(".unread-badge")?.remove();
 
       els.chatName.textContent = type === "dm" ? "@" + id : "# " + name;
       els.inputArea.classList.remove("hidden");
-      
+
       document.querySelectorAll(".nav-item").forEach(i => i.classList.remove("active"));
-      if (navItem) navItem.classList.add("active");
-      
+      navItem?.classList.add("active");
+
       els.messages.innerHTML = "";
-      
+
       const path = type === "group" ? `groups/${id}/messages` : `dms/${currentChat}`;
-      
+
       onValue(ref(db, path), s => {
         els.messages.innerHTML = "";
-        s.forEach(msgSnap => {
-          renderMessage(msgSnap.val());
-        });
+        s.forEach(msgSnap => renderMessage(msgSnap.val()));
         scrollToBottom();
       });
     }
@@ -223,7 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function scrollToBottom() {
       setTimeout(() => {
         els.messages.scrollTop = els.messages.scrollHeight;
-      }, 100); 
+      }, 100);
     }
 
     async function sendMessage() {
@@ -242,7 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
         mediaUrl = await uploadFile(file);
         els.fileInput.value = "";
       }
-      
+
       const path = currentChatType === "group" ? `groups/${currentChat}/messages` : `dms/${currentChat}`;
       
       await push(ref(db, path), {
@@ -265,16 +269,21 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     document.getElementById("send-btn").onclick = sendMessage;
 
+    // Close modal (fixed to find correct overlay)
     document.querySelectorAll(".close-modal").forEach(btn => {
       btn.onclick = (e) => {
-        const overlayId = e.target.closest(".overlay").id;
-        const modalType = overlayId.substring(0, overlayId.indexOf('-'));
-        toggleModal(modalType, false);
+        const overlay = e.target.closest(".overlay");
+        for (let key in els.overlays) {
+          if (els.overlays[key] === overlay) {
+            toggleModal(key, false);
+          }
+        }
       };
     });
 
     document.getElementById("settings-trigger").onclick = () => toggleModal("settings", true);
     document.getElementById("logout-btn").onclick = () => { localStorage.clear(); location.href = "/login.html"; };
+
     document.getElementById("avatar-upload").onchange = async (e) => {
       const file = e.target.files[0];
       if (file) {
@@ -286,9 +295,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
     };
+
+    // Friend requests modal
     document.getElementById("pending-btn").onclick = () => toggleModal("requests", true);
 
-    document.getElementById("add-friend-trigger").onclick = () => toggleModal("add-friend", true);
+    // FIXED — correct key
+    document.getElementById("add-friend-trigger").onclick = () => toggleModal("addFriend", true);
 
     document.getElementById("confirm-add-friend").onclick = async () => {
         const targetUsername = els.addFriendInput.value.trim();
@@ -314,9 +326,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         alert(`Friend request sent to @${targetUsername}!`);
-        toggleModal("add-friend", false);
+        toggleModal("addFriend", false);
     };
 
+    // Create group modal
     document.getElementById("create-group-trigger").onclick = () => {
         els.groupFriendsList.innerHTML = '';
         
@@ -363,9 +376,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         let photoUrl = null;
-        if (groupFile) {
-            photoUrl = await uploadFile(groupFile);
-        }
+        if (groupFile) photoUrl = await uploadFile(groupFile);
         
         const members = selectedMembers.reduce((acc, user) => {
             acc[user] = true;
