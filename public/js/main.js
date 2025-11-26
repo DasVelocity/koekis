@@ -1,5 +1,5 @@
 import { db } from "./firebase.js";
-import { ref, onValue, push, set, update, remove, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
+import { ref, onValue, push, set, update, remove, serverTimestamp, get } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
 import { uploadFile } from "./upload.js";
 
 lucide.createIcons();
@@ -7,204 +7,293 @@ lucide.createIcons();
 const user = JSON.parse(localStorage.getItem("currentUser"));
 if (!user) location.href = "/login.html";
 
+// State
+let currentChat = null;
+let currentChatType = null;
+let friendCache = [];
+
+// DOM Elements
+const els = {
+  app: document.getElementById("app"),
+  messages: document.getElementById("messages"),
+  msgInput: document.getElementById("message-input"),
+  fileInput: document.getElementById("file-input"),
+  chatName: document.getElementById("chat-name"),
+  myAvatar: document.getElementById("my-avatar"),
+  settingAvatar: document.getElementById("settings-avatar-preview"),
+  friendList: document.getElementById("friend-list"),
+  groupList: document.getElementById("group-list"),
+  inputArea: document.getElementById("input-area"),
+  overlays: {
+    settings: document.getElementById("settings-overlay"),
+    requests: document.getElementById("requests-overlay"),
+    group: document.getElementById("group-overlay")
+  }
+};
+
+// Initial Setup
+els.app.classList.remove("hidden");
 document.getElementById("current-user").textContent = "@" + user.username;
 
-let currentChat = null;
-let currentChatType = "dm";
-let unread = {};
-
-const friendList = document.getElementById("friend-list");
-const groupList = document.getElementById("group-list");
-const pendingList = document.getElementById("pending-list");
-const messagesDiv = document.getElementById("messages");
-const messageInput = document.getElementById("message-input");
-const fileInput = document.getElementById("file-input");
-const chatNameEl = document.getElementById("chat-name");
-const myAvatar = document.getElementById("my-avatar");
-const mainChat = document.querySelector(".main-chat");
-
+// 1. User Profile Listener
 onValue(ref(db, `users/${user.username}`), s => {
-  const data = s.val();
-  myAvatar.src = data?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`;
+  const data = s.val() || {};
+  const pfp = data.avatar || "/default.png";
+  els.myAvatar.src = pfp;
+  els.settingAvatar.src = pfp;
 });
 
-function notify(title, body) {
-  if (document.hidden && Notification.permission === "granted") {
-    new Notification(title, { body, icon: myAvatar.src });
-  }
-}
-if (Notification.permission === "default") Notification.requestPermission();
-
-function showPopup(t, m, b = []) {
-  const o = document.createElement("div");
-  o.className = "popup-overlay";
-  o.innerHTML = `<div class="popup"><h3>${t}</h3><p>${m}</p><div>${b.map(x=>`<button class="${x.c}">${x.t}</button>`).join("")}</div></div>`;
-  document.body.appendChild(o);
-  o.onclick = e => e.target.tagName==="BUTTON" && (o.remove(), x?.a?.());
-}
-
-function openDM(u) {
-  currentChat = [user.username, u].sort().join("_");
-  currentChatType = "dm";
-  chatNameEl.textContent = "@" + u;
-  loadMessages();
-  unread[currentChat] = 0;
-}
-
-function openGroup(id, name) {
-  currentChat = id;
-  currentChatType = "group";
-  chatNameEl.textContent = "#" + name;
-  loadMessages();
-  unread[id] = 0;
-}
-
-function loadMessages() {
-  messagesDiv.innerHTML = "";
-  const path = currentChatType === "group" ? `groups/${currentChat}/messages` : `dms/${currentChat}`;
-  onValue(ref(db, path), s => {
-    messagesDiv.innerHTML = "";
-    s.forEach(c => {
-      const m = c.val();
-      const div = document.createElement("div");
-      div.className = `message ${m.user === user.username ? "sent" : ""}`;
-      div.innerHTML = `
-        <img class="avatar" src="${m.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed='+m.user}">
-        <div>
-          <div class="message-author">${m.user}</div>
-          <div class="message-content">${m.text || ""}</div>
-          ${m.media ? `<img src="${m.media}" class="media" onerror="this.remove()">` : ""}
-        </div>`;
-      messagesDiv.appendChild(div);
+// 2. Load Friends
+onValue(ref(db, `users/${user.username}/friends`), s => {
+  els.friendList.innerHTML = "";
+  friendCache = [];
+  const data = s.val() || {};
+  
+  Object.keys(data).forEach(f => {
+    friendCache.push(f);
+    // Fetch friend details for realtime PFP updates
+    onValue(ref(db, `users/${f}`), friendSnap => {
+      const fData = friendSnap.val() || {};
+      const existingEl = document.getElementById(`friend-nav-${f}`);
+      const pfp = fData.avatar || "/default.png";
+      const html = `<img src="${pfp}"><span>${f}</span>`;
+      
+      if (existingEl) {
+        existingEl.innerHTML = html;
+      } else {
+        const div = document.createElement("div");
+        div.className = "nav-item";
+        div.id = `friend-nav-${f}`;
+        div.innerHTML = html;
+        div.onclick = () => openChat(f, "dm");
+        els.friendList.appendChild(div);
+      }
     });
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  });
+});
+
+// 3. Load Groups
+onValue(ref(db, "groups"), s => {
+  els.groupList.innerHTML = "";
+  s.forEach(gSnap => {
+    const g = gSnap.val();
+    if (g.members && g.members[user.username]) {
+      const div = document.createElement("div");
+      div.className = "nav-item";
+      div.innerHTML = `<i data-lucide="hash" style="width:20px;color:#a1a1aa"></i><span>${g.name}</span>`;
+      div.onclick = () => openChat(gSnap.key, "group", g.name);
+      els.groupList.appendChild(div);
+      lucide.createIcons();
+    }
+  });
+});
+
+// 4. Friend Requests
+onValue(ref(db, `friendRequests/${user.username}`), s => {
+  const count = s.size;
+  const badge = document.getElementById("pending-badge");
+  if (count > 0) badge.classList.remove("hidden");
+  else badge.classList.add("hidden");
+  
+  const list = document.getElementById("pending-list");
+  list.innerHTML = "";
+  
+  if (count === 0) list.innerHTML = "<div style='padding:20px;text-align:center;color:#666'>No pending requests</div>";
+
+  s.forEach(req => {
+    const from = req.key;
+    const div = document.createElement("div");
+    div.className = "list-item";
+    div.innerHTML = `
+      <div class="item-user">
+        <span style="font-weight:600">@${from}</span>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-primary accept">Accept</button>
+        <button class="btn-secondary decline">Reject</button>
+      </div>
+    `;
+    div.querySelector(".accept").onclick = async () => {
+      await update(ref(db, `users/${user.username}/friends`), { [from]: true });
+      await update(ref(db, `users/${from}/friends`), { [user.username]: true });
+      await remove(ref(db, `friendRequests/${user.username}/${from}`));
+    };
+    div.querySelector(".decline").onclick = async () => {
+      await remove(ref(db, `friendRequests/${user.username}/${from}`));
+    };
+    list.appendChild(div);
+  });
+});
+
+// 5. Chat Logic
+function openChat(id, type, name = null) {
+  currentChat = type === "dm" ? [user.username, id].sort().join("_") : id;
+  currentChatType = type;
+  
+  els.chatName.textContent = type === "dm" ? "@" + id : "# " + name;
+  els.inputArea.classList.remove("hidden");
+  
+  // Highlight active
+  document.querySelectorAll(".nav-item").forEach(i => i.classList.remove("active"));
+  if (type === "dm") document.getElementById(`friend-nav-${id}`)?.classList.add("active");
+  
+  els.messages.innerHTML = "";
+  
+  const path = type === "group" ? `groups/${id}/messages` : `dms/${currentChat}`;
+  onValue(ref(db, path), s => {
+    els.messages.innerHTML = "";
+    s.forEach(msgSnap => {
+      const m = msgSnap.val();
+      renderMessage(m);
+    });
+    scrollToBottom();
   });
 }
 
+function renderMessage(m) {
+  const div = document.createElement("div");
+  const isMe = m.user === user.username;
+  div.className = `message ${isMe ? "sent" : ""}`;
+  
+  const pfp = m.avatar || "/default.png";
+  
+  div.innerHTML = `
+    <img src="${pfp}" class="message-avatar">
+    <div class="message-content-wrapper">
+      <div class="message-meta">${m.user}</div>
+      ${m.text ? `<div class="message-bubble">${m.text}</div>` : ""}
+      ${m.media ? `<img src="${m.media}" class="media-attachment">` : ""}
+    </div>
+  `;
+  els.messages.appendChild(div);
+}
+
+function scrollToBottom() {
+  els.messages.scrollTop = els.messages.scrollHeight;
+}
+
+// 6. Sending Messages
 async function sendMessage() {
   if (!currentChat) return;
-  if (!messageInput.value.trim() && !fileInput.files[0]) return;
-
-  let media = null;
-  if (fileInput.files[0]) {
-    media = await uploadFile(fileInput.files[0]);
-    fileInput.value = "";
+  const txt = els.msgInput.value.trim();
+  const file = els.fileInput.files[0];
+  
+  if (!txt && !file) return;
+  
+  let mediaUrl = null;
+  if (file) {
+    mediaUrl = await uploadFile(file);
+    els.fileInput.value = "";
   }
-
+  
   const path = currentChatType === "group" ? `groups/${currentChat}/messages` : `dms/${currentChat}`;
-  const msgRef = push(ref(db, path));
-  await set(msgRef, {
+  const myPfp = els.myAvatar.src; // Use current src as snapshot
+  
+  await push(ref(db, path), {
     user: user.username,
-    text: messageInput.value,
-    avatar: myAvatar.src,
-    media,
+    text: txt,
+    media: mediaUrl,
+    avatar: myPfp,
     timestamp: serverTimestamp()
   });
-  messageInput.value = "";
+  
+  els.msgInput.value = "";
+  scrollToBottom();
 }
 
-messageInput.addEventListener("keydown", e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), sendMessage()));
-fileInput.addEventListener("change", sendMessage);
+els.msgInput.onkeydown = (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+};
+document.getElementById("send-btn").onclick = sendMessage;
 
-onValue(ref(db, `users/${user.username}/friends`), s => {
-  friendList.innerHTML = "";
-  const f = s.val() || {};
-  Object.keys(f).sort().forEach(u => {
-    const d = document.createElement("div");
-    d.className = "friend";
-    d.innerHTML = `<img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${u}"><div><strong>@${u}</strong><span class="online">Online</span></div>`;
-    d.onclick = () => openDM(u);
-    friendList.appendChild(d);
-  });
-});
+// 7. Modals & Overlays Logic
+function toggleModal(id, show) {
+  const el = els.overlays[id];
+  if (show) el.classList.remove("hidden");
+  else el.classList.add("hidden");
+}
 
-onValue(ref(db, `groups`), s => {
-  groupList.innerHTML = "";
-  s.forEach(c => {
-    const g = c.val();
-    if (g.members?.[user.username]) {
-      const d = document.createElement("div");
-      d.className = "friend";
-      d.innerHTML = `<div><strong># ${g.name}</strong></div>`;
-      d.onclick = () => openGroup(c.key, g.name);
-      groupList.appendChild(d);
+// Settings
+document.getElementById("settings-trigger").onclick = () => toggleModal("settings", true);
+document.getElementById("close-settings").onclick = () => toggleModal("settings", false);
+
+document.getElementById("avatar-upload").onchange = async (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    const url = await uploadFile(file);
+    if (url) {
+      await update(ref(db, `users/${user.username}`), { avatar: url });
+      alert("Avatar updated!");
     }
-  });
-});
-
-onValue(ref(db, `friendRequests/${user.username}`), s => {
-  pendingList.innerHTML = "";
-  s.forEach(c => {
-    const from = c.key;
-    const d = document.createElement("div");
-    d.className = "pending-item";
-    d.innerHTML = `<img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${from}"><div><strong>@${from}</strong></div>
-      <div class="pending-actions"><button class="accept">Accept</button><button class="decline">Decline</button></div>`;
-    d.querySelector(".accept").onclick = () => {
-      update(ref(db, `users/${user.username}/friends`), { [from]: true });
-      update(ref(db, `users/${from}/friends`), { [user.username]: true });
-      remove(ref(db, `friendRequests/${user.username}/${from}`));
-    };
-    d.querySelector(".decline").onclick = () => remove(ref(db, `friendRequests/${user.username}/${from}`));
-    pendingList.appendChild(d);
-  });
-});
-
-document.getElementById("add-friend-btn").onclick = () => {
-  const name = prompt("Username to add:");
-  if (name) {
-    set(ref(db, `friendRequests/${name.trim().toLowerCase()}/${user.username}`), { from: user.username });
-    showPopup("Sent", `Request sent to @${name}`);
   }
 };
 
-function openSettings() {
-  mainChat.innerHTML = `
-    <div class="settings-page">
-      <button id="close-settings" class="icon-btn" style="position:absolute;top:16px;right:16px;"><i data-lucide="x"></i></button>
-      <div class="settings-card">
-        <h2>My Account</h2>
-        <div class="setting-row"><label>Change Avatar</label><input type="file" id="avatar-upload" accept="image/*"></div>
-        <div class="setting-row"><label>Status</label><select id="status-select"><option>Online</option><option>Away</option><option>Do Not Disturb</option></select></div>
-        <h2>Groups</h2>
-        <button id="create-group">Create New Group</button>
-        <button class="logout-btn" id="logout">Logout</button>
-      </div>
-    </div>`;
-  lucide.createIcons();
-  document.getElementById("close-settings").onclick = () => location.reload();
-  document.getElementById("logout").onclick = () => { localStorage.clear(); location.href = "/login.html"; };
-  document.getElementById("avatar-upload").onchange = async e => {
-    const url = await uploadFile(e.target.files[0]);
-    if (url) {
-      update(ref(db, `users/${user.username}`), { avatar: url });
-      myAvatar.src = url;
-    }
-  };
-  document.getElementById("create-group").onclick = async () => {
-    const name = prompt("Group name:");
-    if (!name) return;
-    const friends = await new Promise(res => {
-      onValue(ref(db, `users/${user.username}/friends`), s => res(Object.keys(s.val() || {})), { onlyOnce: true });
-    });
-    let html = `<div style="max-height:400px;overflow-y:auto;">`;
-    friends.forEach(f => {
-      html += `<label style="display:block;padding:8px;cursor:pointer"><input type="checkbox" value="${f}"> @${f}</label>`;
-    });
-    html += `</div><button id="confirm-group" style="margin-top:16px;padding:12px;background:#5865f2;color:white;border:none;border-radius:8px">Create</button>`;
-    showPopup(`Create Group: ${name}`, html, []);
-    document.getElementById("confirm-group")?.addEventListener("click", () => {
-      const selected = Array.from(document.querySelectorAll('input[type="checkbox"]:checked')).map(c => c.value);
-      if (selected.length === 0) return alert("Select at least one friend");
-      const g = push(ref(db, "groups"));
-      const members = { [user.username]: true };
-      selected.forEach(u => members[u] = true);
-      set(g, { name, creator: user.username, members });
-      document.querySelector(".popup-overlay")?.remove();
-    });
-  };
+document.getElementById("logout-btn").onclick = () => {
+  localStorage.clear();
+  location.href = "/login.html";
 };
 
-document.getElementById("settings-btn").onclick = openSettings;
+// Friend Requests Button
+document.getElementById("pending-btn").onclick = () => toggleModal("requests", true);
+document.getElementById("close-requests").onclick = () => toggleModal("requests", false);
 
-document.getElementById("app").classList.remove("hidden");
+// Add Friend Action
+document.getElementById("add-friend-btn").onclick = async () => {
+  const name = prompt("Enter username to add:");
+  if (!name) return;
+  const target = name.trim().toLowerCase();
+  
+  if (target === user.username) return alert("Cannot add yourself");
+  
+  const snap = await get(ref(db, `users/${target}`));
+  if (!snap.exists()) return alert("User not found");
+  
+  await set(ref(db, `friendRequests/${target}/${user.username}`), { from: user.username });
+  alert("Request sent!");
+};
+
+// Create Group
+const createGroupBtn = document.createElement("div");
+createGroupBtn.className = "nav-label";
+createGroupBtn.style.marginTop = "20px";
+createGroupBtn.style.cursor = "pointer";
+createGroupBtn.innerHTML = `<span>GROUPS</span> <i data-lucide="plus" style="width:16px"></i>`;
+createGroupBtn.onclick = () => {
+  // Populate friend list for selection
+  const container = document.getElementById("group-friends-list");
+  container.innerHTML = "";
+  friendCache.forEach(f => {
+    const row = document.createElement("label");
+    row.className = "checkbox-row";
+    row.innerHTML = `<input type="checkbox" value="${f}"> <span>@${f}</span>`;
+    container.appendChild(row);
+  });
+  toggleModal("group", true);
+};
+els.groupList.parentElement.insertBefore(createGroupBtn, els.groupList.parentElement.firstChild);
+
+document.getElementById("close-group").onclick = () => toggleModal("group", false);
+
+document.getElementById("confirm-create-group").onclick = async () => {
+  const name = document.getElementById("group-name-input").value.trim();
+  const checkboxes = document.querySelectorAll("#group-friends-list input:checked");
+  
+  if (!name) return alert("Group name required");
+  if (checkboxes.length === 0) return alert("Select at least 1 friend");
+  
+  const members = { [user.username]: true };
+  checkboxes.forEach(c => members[c.value] = true);
+  
+  const gRef = push(ref(db, "groups"));
+  await set(gRef, {
+    name,
+    creator: user.username,
+    members
+  });
+  
+  toggleModal("group", false);
+  document.getElementById("group-name-input").value = "";
+};
